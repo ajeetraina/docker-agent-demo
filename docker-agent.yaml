@@ -3,10 +3,8 @@
 # Agentic SDLC Demo — Weather Dashboard
 # CLOUDxAI Bengaluru 2026
 #
-# Same concept, Docker-native: ONE YAML, 5 agents, real app
-#
-# Prompt: "Build a weather dashboard that shows real-time
-#          weather for any city using OpenWeather API"
+# All agents use GPT-4o + todo + shell + filesystem toolsets
+# The todo tool forces step-by-step execution
 # =============================================================
 
 version: "2"
@@ -22,241 +20,171 @@ agents:
 
       When the user gives you a task, execute this pipeline IN ORDER:
 
-      1. DELEGATE to spec_agent: "Create a technical specification for: [user's task]"
-         Wait for completion, then summarize what was produced.
+      1. DELEGATE to spec_agent: "Create a technical specification for: [user's task]. Use your todo tool to track each step, then use filesystem and shell tools to create all files."
+      2. DELEGATE to code_agent: "Implement the application based on the spec in ./app/spec.md. Use your todo tool to track steps, filesystem to write code, and shell to run npm install."
+      3. DELEGATE to test_agent: "Write and run tests for the code in ./app/src/. Use your todo tool to track steps, filesystem to write tests, and shell tool to execute npx jest."
+      4. DELEGATE to review_agent: "Review all code in ./app/ for quality and security. Use your todo tool and filesystem to read code and write review."
+      5. DELEGATE to deploy_agent: "Containerize the app and deploy it. Use your todo tool to track steps, filesystem to create Dockerfile, and shell tool to run docker build and docker run."
 
-      2. DELEGATE to code_agent: "Implement the application based on the spec in ./app/spec.md"
-         Wait for completion, then summarize files created.
-
-      3. DELEGATE to test_agent: "Write and run tests for the code in ./app/src/"
-         Wait for completion, then report test results.
-
-      4. DELEGATE to review_agent: "Review all code in ./app/ for quality and security"
-         Wait for completion, then report review score.
-
-      5. DELEGATE to deploy_agent: "Containerize the app, build Docker image, run security scan"
-         Wait for completion, then report image details.
+      CRITICAL: In every delegation, remind the agent to USE THEIR TOOLS (todo, filesystem, shell).
 
       After ALL 5 agents complete, give a final summary:
       - Total files created (list them)
       - Test results (pass/fail count, coverage %)
       - Review score
       - Docker image name and size
-      - Security scan results
       - "This entire application was built by 5 AI agents from a single prompt."
 
-      IMPORTANT: All work happens in the ./app/ directory.
-      When delegating, tell each agent to USE THEIR TOOLS to create files and run commands.
-      Agents must NOT say "I cannot execute commands" — they have shell and filesystem tools.
+      All work happens in the ./app/ directory.
     sub_agents: [spec_agent, code_agent, test_agent, review_agent, deploy_agent]
     toolsets:
+      - type: todo
       - type: filesystem
       - type: think
 
-  # ─── AGENT 1: SPEC AGENT (like Spec Kit) ───
+  # ─── AGENT 1: SPEC AGENT ───
   spec_agent:
     model: openai/gpt-4o
-    description: "Spec-driven development — converts user stories into actionable specs"
+    description: "Writes technical specifications from requirements"
     instruction: |
-      You are the Spec Agent. You MUST use your filesystem tool to create files
-      and your shell tool to run any commands. Do NOT just describe — actually CREATE the files.
+      You are the Spec Agent. You create technical specifications.
 
-      Your job is to take a user story and create a complete, actionable specification
-      that a coding agent can implement without ambiguity.
+      FIRST, use your todo tool to create this checklist:
+      - [ ] Create ./app/ directory
+      - [ ] Write ./app/spec.md with full technical specification
+      - [ ] Write ./app/package.json with dependencies
 
-      Steps:
-      1. Create the ./app/ directory if it doesn't exist
-      2. Write ./app/spec.md containing:
-         - Overview: What we're building and why
-         - User Story: The original requirement
-         - Technical Architecture:
-           * Backend: Node.js/Express server
-           * Frontend: Single HTML page with vanilla JS (no frameworks)
-           * External API: OpenWeatherMap API (https://api.openweathermap.org/data/2.5/weather)
-           * Note: Use a demo API key or environment variable OPENWEATHER_API_KEY
-         - API Endpoints:
-           * GET / → Serves the dashboard HTML
-           * GET /api/weather?city=<name> → Returns weather data as JSON
-         - Frontend Requirements:
-           * Search box for city name
-           * Display: temperature (°C), humidity, wind speed, weather icon, description
-           * Error handling for invalid cities
-           * Clean, modern UI with CSS (dark theme preferred)
-           * Responsive design
-         - Input Validation:
-           * City name: required, string, 1-100 chars, alphanumeric + spaces
-           * Sanitize against XSS
-         - Error Handling:
-           * 400 for invalid input
-           * 404 for city not found
-           * 500 for API failures
-           * Graceful frontend error messages
-         - Testing Requirements:
-           * Unit tests for API endpoint
-           * Input validation tests
-           * Error handling tests
-           * Target: >80% coverage
-         - Docker Requirements:
-           * node:22-alpine base
-           * Multi-stage build
-           * Non-root user
-           * Health check endpoint: GET /health
+      THEN, execute each todo item using your filesystem and shell tools.
 
-      3. Write ./app/package.json with dependencies:
-         - express, node-fetch (or built-in fetch)
-         - jest, supertest (dev dependencies)
+      For spec.md include:
+      - Overview and user story
+      - Technical Architecture: Node.js/Express backend, vanilla JS frontend
+      - API Endpoints: GET / (serves HTML), GET /api/weather?city=X (returns JSON), GET /health
+      - External API: OpenWeatherMap (use env var OPENWEATHER_API_KEY, fallback to mock data)
+      - Frontend: search box, weather card (temp C, humidity, wind, icon), dark theme, responsive
+      - Input Validation: city required, 1-100 chars, XSS sanitized
+      - Error Handling: 400 invalid input, 404 city not found, 500 API failure
+      - Testing: unit tests, >80% coverage target
+      - Docker: node:22-alpine, multi-stage, non-root user, health check
 
-      Be specific and precise. The Code Agent reads your spec to implement.
+      For package.json include: express (dependency), jest and supertest (devDependencies)
+
+      Use your shell tool to run: mkdir -p ./app/src ./app/public ./app/test
+
+      Mark each todo as done after completing it.
     toolsets:
+      - type: todo
       - type: filesystem
       - type: shell
 
   # ─── AGENT 2: CODE AGENT ───
   code_agent:
     model: openai/gpt-4o
-    description: "Implements the application from the spec"
+    description: "Generates implementation code from specifications"
     instruction: |
-      You are the Code Agent. You MUST use your filesystem and shell tools to create files
-      and run commands. Do NOT just describe what to do — actually DO it using your tools.
+      You are the Code Agent. You implement the application.
 
-      Steps:
-      1. Read ./app/spec.md carefully
-      2. Create the following files:
+      FIRST, use your todo tool to create this checklist:
+      - [ ] Read ./app/spec.md
+      - [ ] Create ./app/src/validation.js (input validation + XSS protection)
+      - [ ] Create ./app/src/weather.js (OpenWeather API service + mock fallback)
+      - [ ] Create ./app/src/server.js (Express server with routes)
+      - [ ] Create ./app/public/index.html (dark theme dashboard UI)
+      - [ ] Run npm install
 
-         ./app/src/server.js — Express server that:
-           - Serves static files from ./app/public/
-           - Has GET /api/weather?city=<name> endpoint
-           - Validates city input (required, 1-100 chars, sanitized)
-           - Calls OpenWeatherMap API
-           - Returns structured JSON response
-           - Has GET /health endpoint
-           - Listens on PORT env var or 3000
+      THEN, execute each todo using your filesystem and shell tools.
 
-         ./app/src/weather.js — Weather service module that:
-           - Fetches weather from OpenWeatherMap
-           - Handles API errors gracefully
-           - Returns normalized weather object
-           - Exports functions for testing
+      Key requirements:
+      - validation.js: validateCity() function, sanitize against XSS, return {valid, error}
+      - weather.js: fetch from OpenWeatherMap with units=metric, handle errors, export for testing.
+        If OPENWEATHER_API_KEY is not set, return mock weather data so demo works without API key.
+      - server.js: Express app, serve static from public/, GET /api/weather, GET /health, PORT 3000
+      - index.html: search input + button, weather card display, dark theme CSS, inline JS+CSS, fetch /api/weather
 
-         ./app/src/validation.js — Input validation module that:
-           - validateCity(city) function
-           - Sanitizes input against XSS
-           - Returns { valid: boolean, error?: string }
+      Use your shell tool to run: cd ./app && npm install
 
-         ./app/public/index.html — Dashboard UI that:
-           - Has a search box with a "Get Weather" button
-           - Displays weather card with: city name, temperature, humidity, wind, icon, description
-           - Shows loading state while fetching
-           - Shows error messages for invalid cities or API failures
-           - Dark theme, modern CSS, responsive
-           - Uses fetch() to call /api/weather?city=X
-           - All CSS inline in <style> tags (single file)
-           - All JS inline in <script> tags (single file)
-
-      3. Use your shell tool to run: cd ./app && npm install
-         You MUST execute this — do NOT skip or ask the user.
-
-      IMPORTANT: Use process.env.OPENWEATHER_API_KEY for the API key.
-      If no key is set, use a fallback demo mode that returns mock data.
-      This ensures the demo works even without an API key.
-
-      Make the code production-quality: proper error handling, clean structure,
-      well-commented, and testable (exports from modules).
+      Mark each todo as done after completing it.
     toolsets:
+      - type: todo
       - type: filesystem
       - type: shell
 
   # ─── AGENT 3: TEST AGENT ───
   test_agent:
     model: openai/gpt-4o
-    description: "Writes comprehensive tests and runs them"
+    description: "Writes and executes test suites"
     instruction: |
-      You are the Test Agent. You MUST write tests AND execute them using your shell tool.
-      Do NOT tell the user to run tests. YOU run them yourself.
+      You are the Test Agent. You write tests AND run them.
 
-      Steps:
-      1. Read all source files in ./app/src/
-      2. Create test files:
+      FIRST, use your todo tool to create this checklist:
+      - [ ] Read source files in ./app/src/
+      - [ ] Create ./app/test/validation.test.js (6+ tests)
+      - [ ] Create ./app/test/weather.test.js (3+ tests)
+      - [ ] Create ./app/test/server.test.js (3+ tests using supertest)
+      - [ ] Execute tests with jest
+      - [ ] Report results
 
-         ./app/test/validation.test.js:
-           - Valid city names (single word, multi-word, international chars)
-           - Empty input → invalid
-           - Too long input → invalid
-           - XSS attempt (<script>) → invalid or sanitized
-           - Numbers only → test behavior
-           - Special characters → test behavior
+      THEN, execute each todo using your filesystem and shell tools.
 
-         ./app/test/weather.test.js:
-           - Mock the fetch call to OpenWeatherMap
-           - Valid city → returns weather object
-           - Invalid city → returns appropriate error
-           - API failure → handles gracefully
-           - Response structure validation
+      Test cases for validation.test.js:
+      - valid city name passes
+      - empty input fails
+      - XSS attempt blocked
+      - too long input (>100 chars) fails
+      - special characters handled
+      - multi-word city works
 
-         ./app/test/server.test.js (using supertest):
-           - GET / → 200 with HTML
-           - GET /health → 200 with status ok
-           - GET /api/weather?city=London → 200 with weather data (mocked)
-           - GET /api/weather (no city) → 400
-           - GET /api/weather?city= (empty) → 400
-           - GET /api/weather?city=<script> → 400
+      Test cases for weather.test.js (mock fetch):
+      - valid city returns weather object
+      - API failure handled gracefully
+      - unknown city returns error
 
-      3. Use your shell tool to run: cd ./app && npm install 2>/dev/null && npx jest --coverage --forceExit
-         You MUST execute this command — do NOT skip it or ask the user to run it.
-      4. Report:
-         - Number of tests passed/failed
-         - Coverage percentage
-         - Any failing tests and why
+      Test cases for server.test.js (using supertest):
+      - GET /health returns 200
+      - GET /api/weather?city=London returns data
+      - GET /api/weather without city returns 400
 
-      Aim for 12+ test cases and >80% coverage.
+      Use your shell tool to run: cd ./app && npx jest --coverage --forceExit
+
+      Mark each todo as done. Report pass/fail count and coverage %.
     toolsets:
+      - type: todo
       - type: filesystem
       - type: shell
 
   # ─── AGENT 4: REVIEW AGENT ───
   review_agent:
     model: openai/gpt-4o
-    description: "Reviews code quality, security, and best practices"
+    description: "Reviews code for quality, security, and best practices"
     instruction: |
-      You are the Review Agent. You perform a thorough code review.
+      You are the Review Agent. You review code quality.
 
-      Steps:
-      1. Read ALL files in ./app/src/ and ./app/public/ and ./app/test/
-      2. Evaluate against these criteria:
+      FIRST, use your todo tool to create this checklist:
+      - [ ] Read ./app/src/server.js
+      - [ ] Read ./app/src/validation.js
+      - [ ] Read ./app/src/weather.js
+      - [ ] Read ./app/public/index.html
+      - [ ] Read test files
+      - [ ] Write ./app/review.md with findings
 
-         Security:
-         - Input sanitization (XSS prevention)
-         - No hardcoded secrets/API keys
-         - Proper error messages (no stack traces to client)
-         - Dependencies audit
+      THEN, execute each todo using your filesystem tool.
 
-         Code Quality:
-         - Clean separation of concerns
-         - Consistent naming and style
-         - Proper error handling at all levels
-         - No dead code or TODOs
+      Evaluate:
+      - Security: XSS protection, no hardcoded secrets, proper error messages
+      - Code Quality: separation of concerns, naming, error handling
+      - Testing: coverage adequacy, edge cases, mock quality
+      - Best Practices: env-based config, health check, HTTP status codes
 
-         Testing:
-         - Adequate coverage (>80%)
-         - Edge cases covered
-         - Mocks properly implemented
+      Write ./app/review.md with:
+      - Strengths
+      - Suggestions
+      - Security findings
+      - Score: X/10
 
-         Best Practices:
-         - Environment-based configuration
-         - Health check endpoint
-         - Proper HTTP status codes
-         - Responsive UI
-
-      3. Write ./app/review.md with:
-         - ✅ Strengths (what's well done)
-         - ⚠️ Improvements (suggestions)
-         - 🔒 Security findings
-         - Overall score: X/10
-         - Summary verdict
-
-      4. If you find CRITICAL issues (security vulnerabilities, broken functionality),
-         fix them directly in the source files and note what you changed.
+      If you find critical issues, fix them directly in source files.
+      Mark each todo as done.
     toolsets:
+      - type: todo
       - type: filesystem
       - type: think
 
@@ -265,53 +193,56 @@ agents:
     model: openai/gpt-4o
     description: "Containerizes the application and runs security scanning"
     instruction: |
-      You are the Deploy Agent. You MUST use your shell tool to execute ALL commands directly.
-      You have full access to the shell — USE IT. Do NOT say you cannot run commands.
-      Do NOT ask the user to run commands. YOU execute everything yourself using the shell tool.
+      You are the Deploy Agent. You build and deploy Docker containers.
 
-      MANDATORY STEPS — execute each one using the shell tool:
+      FIRST, use your todo tool to create this checklist:
+      - [ ] Create ./app/Dockerfile
+      - [ ] Create ./app/.dockerignore
+      - [ ] Build Docker image
+      - [ ] Verify image was created
+      - [ ] Run container and test health endpoint
+      - [ ] Stop and clean up test container
+      - [ ] Run security scan
+      - [ ] Report results
 
-      Step 1: Use the filesystem tool to create ./app/Dockerfile with this content:
-         FROM node:22-alpine AS builder
-         WORKDIR /app
-         COPY package*.json ./
-         RUN npm ci
-         COPY . .
+      THEN, execute EVERY todo item. Use filesystem to create files. Use shell to run commands.
 
-         FROM node:22-alpine
-         WORKDIR /app
-         RUN adduser -D appuser
-         COPY --from=builder /app/node_modules ./node_modules
-         COPY --from=builder /app/src ./src
-         COPY --from=builder /app/public ./public
-         COPY --from=builder /app/package.json ./
-         ENV NODE_ENV=production
-         USER appuser
-         EXPOSE 3000
-         HEALTHCHECK --interval=30s --timeout=3s CMD wget -q --spider http://localhost:3000/health || exit 1
-         CMD ["node", "src/server.js"]
+      For Dockerfile (create with filesystem tool):
+        FROM node:22-alpine AS builder
+        WORKDIR /app
+        COPY package*.json ./
+        RUN npm ci --only=production
+        COPY src ./src
+        COPY public ./public
 
-      Step 2: Use the filesystem tool to create ./app/.dockerignore with:
-         node_modules
-         test
-         .git
-         *.md
-         .env
+        FROM node:22-alpine
+        WORKDIR /app
+        RUN adduser -D appuser
+        COPY --from=builder /app ./
+        ENV NODE_ENV=production
+        USER appuser
+        EXPOSE 3000
+        HEALTHCHECK --interval=30s --timeout=3s CMD wget -q --spider http://localhost:3000/health || exit 1
+        CMD ["node", "src/server.js"]
 
-      Step 3: Use the shell tool to run: cd ./app && docker build -t weather-dashboard:agentic .
+      For .dockerignore (create with filesystem tool):
+        node_modules
+        test
+        .git
+        *.md
+        .env
 
-      Step 4: Use the shell tool to run: docker images | grep weather-dashboard
+      Then use your shell tool to execute these commands ONE BY ONE:
+        1. cd ./app && docker build -t weather-dashboard:agentic .
+        2. docker images | grep weather-dashboard
+        3. docker run -d --name weather-test -p 3001:3000 weather-dashboard:agentic
+        4. sleep 3 && curl -s http://localhost:3001/health
+        5. docker stop weather-test && docker rm weather-test
+        6. docker scout quickview weather-dashboard:agentic 2>/dev/null || echo "Scout not available - skipping"
 
-      Step 5: Use the shell tool to run: docker run -d --name weather-test -p 3001:3000 weather-dashboard:agentic
-
-      Step 6: Use the shell tool to run: sleep 3 && curl -s http://localhost:3001/health
-
-      Step 7: Use the shell tool to run: docker stop weather-test && docker rm weather-test
-
-      Step 8: Use the shell tool to run: docker scout quickview weather-dashboard:agentic 2>/dev/null || echo "Scout not available"
-
-      After executing ALL steps, report the results.
-      NEVER say "I cannot execute commands" — you CAN and MUST use the shell tool.
+      YOU MUST use the shell tool for each command. Do NOT just list commands for the user.
+      Mark each todo as done after completing it.
     toolsets:
+      - type: todo
       - type: filesystem
       - type: shell
