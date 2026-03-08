@@ -3,7 +3,6 @@
 # Agentic SDLC Demo — Weather Dashboard
 # CLOUDxAI Bengaluru 2026
 #
-# Inspired by Microsoft's AI-led SDLC blog (Feb 2026)
 # Same concept, Docker-native: ONE YAML, 5 agents, real app
 #
 # Prompt: "Build a weather dashboard that shows real-time
